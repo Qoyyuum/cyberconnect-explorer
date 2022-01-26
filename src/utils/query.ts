@@ -101,6 +101,7 @@ export const request = async (url = '', data = {}) => {
       'Content-Type': 'application/json',
       //Allow CORS
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
     },
     referrerPolicy: 'no-referrer',
     body: JSON.stringify(data),
