@@ -95,15 +95,11 @@ export const request = async (url = '', data = {}) => {
   // Default options are marked with *
   const response = await fetch(url, {
     method: 'POST',
-    // mode: 'cors',
+    mode: 'cors',
     redirect: 'follow',
     cache: 'no-cache',
     headers: {
       'Content-Type': 'application/json',
-      //Allow CORS
-      'Access-Control-Allow-Origin': 'Origin',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
     },
     referrerPolicy: 'no-referrer',
     body: JSON.stringify(data),
