@@ -8,11 +8,24 @@ export interface FollowListInfoArgs {
   followerAfter?: string;
 }
 
+export interface RecomendationListInfoArgs {
+  address: string;
+}
+
 export interface SearchUserInfoArgs {
   fromAddr: string;
   toAddr: string;
   namespace?: string;
   network?: string;
+}
+
+export interface RecommendedUser {
+  address: string
+  recommendationReason: string
+}
+
+export interface RecommendationInfo {
+  list: RecommendedUser;
 }
 
 export interface BasicUserInfo {
@@ -54,7 +67,9 @@ export enum Network {
 }
 
 export interface ConnectionData {
-  address: string,
+  ens: string;
+  address: string;
+  avatar: string;
   is_follower: boolean,
   is_following: boolean
 }
