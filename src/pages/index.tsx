@@ -1,330 +1,179 @@
-import type { NextPage } from 'next';
-import styles from './index.module.css';
-import { WalletConnectButton } from '@/components';
-import { useEffect, useState } from 'react';
+import ConnectionsTable from '@/components/ConnectionsTable';
+import { isValidAddr } from '@/utils/helper';
+import { useFetch } from '@/utils/hooks';
+import { followListInfoQuery, recommendationListQuery, searchUserInfoQuery } from '@/utils/query';
+import { FIRST, NAME_SPACE, NETWORK } from '@/utils/settings';
+import theme from '@/utils/theme';
+import { ConnectionsData, FollowListInfoResp, RecommendedUser, SearchUserInfoResp } from '@/utils/types';
+import { Box, ChakraProvider, Flex, Heading, Input, Spinner } from '@chakra-ui/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import ConnectionsGraph from '../components/ConnectionsGraph';
 
-import Snackbar from '@mui/material/Snackbar';
-import MuiAlert from '@mui/material/Alert';
-import Avatar from '@mui/material/Avatar';
-import LoadingButton from '@mui/lab/LoadingButton';
-import TextField from '@mui/material/TextField';
 
-import { followListInfoQuery, searchUserInfoQuery } from '@/utils/query';
-import { FollowListInfoResp, SearchUserInfoResp, Network } from '@/utils/types';
-import { formatAddress, removeDuplicate, isValidAddr } from '@/utils/helper';
-import { useWeb3 } from '@/context/web3Context';
+const ConnectionsPage = () => {
+    const [addressInput, setAddressInput] = useState<string>("0x1dd779850b584e10e8f95b03a2a86b90b312d75d");
+    const [addressInputImmediate, setAddressInputImmediate] = useState<string>("0x1dd779850b584e10e8f95b03a2a86b90b312d75d");
 
-const NAME_SPACE = 'CyberConnect';
-const NETWORK = Network.ETH;
-const FIRST = 10; // The number of users in followings/followers list for each fetch
-
-const Home: NextPage = () => {
-  const { address, cyberConnect } = useWeb3();
-  const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false);
-  const [snackbarText, setSnackbarText] = useState<string>('');
-
-  const [searchInput, setSearchInput] = useState<string>('');
-  const [searchAddrInfo, setSearchAddrInfo] =
-    useState<SearchUserInfoResp | null>(null);
-  const [searchLoading, setSearchLoading] = useState<boolean>(false);
-
-  const [followListInfo, setFollowListInfo] =
-    useState<FollowListInfoResp | null>(null);
-  const [followLoading, setFollowLoading] = useState<boolean>(false);
-
-  const fetchSearchAddrInfo = async (toAddr: string) => {
-    const resp = await searchUserInfoQuery({
-      fromAddr: address,
-      toAddr,
-      namespace: NAME_SPACE,
-      network: NETWORK,
-    });
-    if (resp) {
-      setSearchAddrInfo(resp);
-    }
-  };
-
-  const handleFollow = async () => {
-    if (!cyberConnect || !searchAddrInfo) {
-      return;
-    }
-
-    setFollowLoading(true);
-
-    // Execute connect if the current user is not following the search addrress.
-    if (!searchAddrInfo.followStatus.isFollowing) {
-      await cyberConnect.connect(searchInput);
-
-      // Overwrite the local status of isFollowing
-      setSearchAddrInfo((prev) => {
-        return !!prev
-          ? {
-              ...prev,
-              followStatus: {
-                ...prev.followStatus,
-                isFollowing: true,
-              },
-            }
-          : prev;
-      });
-
-      // Add the new following to the current user followings list
-      setFollowListInfo((prev) => {
-        return !!prev
-          ? {
-              ...prev,
-              followingCount: prev.followingCount + 1,
-              followings: {
-                ...prev.followings,
-                list: removeDuplicate(
-                  prev.followings.list.concat([searchAddrInfo.identity])
-                ),
-              },
-            }
-          : prev;
-      });
-
-      setSnackbarText('Follow Success!');
-    } else {
-      await cyberConnect.disconnect(searchInput);
-
-      setSearchAddrInfo((prev) => {
-        return !!prev
-          ? {
-              ...prev,
-              followStatus: {
-                ...prev.followStatus,
-                isFollowing: false,
-              },
-            }
-          : prev;
-      });
-
-      setFollowListInfo((prev) => {
-        return !!prev
-          ? {
-              ...prev,
-              followingCount: prev.followingCount - 1,
-              followings: {
-                ...prev.followings,
-                list: prev.followings.list.filter((user) => {
-                  return user.address !== searchAddrInfo.identity.address;
-                }),
-              },
-            }
-          : prev;
-      });
-
-      setSnackbarText('Unfollow Success!');
-    }
-
-    setSnackbarOpen(true);
-    setFollowLoading(false);
-  };
-
-  const handleInputChange = async (value: string) => {
-    setSearchInput(value);
-
-    if (isValidAddr(value) && address) {
-      setSearchLoading(true);
-      await fetchSearchAddrInfo(value);
-    }
-    setSearchLoading(false);
-  };
-
-  // Get the current user followings and followers list
-  const initFollowListInfo = async () => {
-    if (!address) {
-      return;
-    }
-
-    const resp = await followListInfoQuery({
-      address,
-      namespace: NAME_SPACE,
-      network: NETWORK,
-      followingFirst: FIRST,
-      followerFirst: FIRST,
-    });
-    if (resp) {
-      setFollowListInfo(resp);
-    }
-  };
-
-  const fetchMore = async (type: 'followings' | 'followers') => {
-    if (!address || !followListInfo) {
-      return;
-    }
-
-    const params =
-      type === 'followers'
-        ? {
-            address,
+    const [searchAddrInfo, setSearchAddrInfo] = useState<SearchUserInfoResp | null>(null);
+    const fetchSearchAddrInfo = async (toAddr: string) => {
+        const resp = await searchUserInfoQuery({
+            fromAddr: addressInput,
+            toAddr,
             namespace: NAME_SPACE,
             network: NETWORK,
-            followerFirst: FIRST,
-            followerAfter: followListInfo.followers.pageInfo.endCursor,
-          }
-        : {
-            address,
+        });
+        if (resp) {
+            setSearchAddrInfo(resp);
+        }
+    };
+
+    const [followListInfo, setFollowListInfo] =
+        useState<FollowListInfoResp | null>(null);
+    const [recommendedList, setRecommendedList] =
+        useState<RecommendedUser[]>([]);
+    const [address, setAddress] = useState<string>(addressInput)
+    const [balanceState, invalidateBalance] = useFetch(`https://api.etherscan.io/api?module=account&action=balance&address=${address}&startblock=0&endblock=99999999&page=1&offset=10&sort=asc&apikey=ECK9EWNEXGYJUEAACITH3F2N8DC6GMMHS9`);
+
+    useEffect(()=>{
+        followListInfo && setAddress(followListInfo.address);
+    }, [followListInfo])
+
+    const [connections, setConnections] = useState<ConnectionsData>({data: []});
+    useEffect(() => {
+        // TODO: it should be done querying the info for each follower because if there are more than query maximum (FIRST=1000) it could be missing in the list
+        // combine followers and following into connections
+        let connections = followListInfo?.followers?.list.map((follower) => ({...follower, is_follower: true, is_following: false}));
+        const following = followListInfo?.followings?.list.map((following) => ({...following, is_follower:false, is_following: true}));
+        following?.forEach((fing) => {
+            let connection_index = connections?.findIndex((fer) => {
+                return fer.address == fing.address;
+            });
+            if (connection_index === -1 || connection_index === undefined) {
+                connections?.push(fing);
+            } else {
+                if(connections == undefined) {
+                    connections = [];
+                }
+                connections[connection_index].is_following = true;
+            }
+        });
+        if(connections !== undefined) {
+            setConnections({ data: connections });
+        }
+    }, [followListInfo]);
+
+    useEffect(() => {
+        // Get the current user followings and followers list
+        const initFollowListInfo = async () => {
+            if (!addressInput) {
+                return;
+            }
+
+        const resp = await followListInfoQuery({
+            address: addressInput,
             namespace: NAME_SPACE,
             network: NETWORK,
             followingFirst: FIRST,
-            followingAfter: followListInfo.followings.pageInfo.endCursor,
-          };
+            followerFirst: FIRST,
+        });
+        if (resp) {
+            setFollowListInfo(resp);
+        }
 
-    const resp = await followListInfoQuery(params);
-    if (resp) {
-      type === 'followers'
-        ? setFollowListInfo({
-            ...followListInfo,
-            followers: {
-              pageInfo: resp.followers.pageInfo,
-              list: removeDuplicate(
-                followListInfo.followers.list.concat(resp.followers.list)
-              ),
-            },
-          })
-        : setFollowListInfo({
-            ...followListInfo,
-            followings: {
-              pageInfo: resp.followings.pageInfo,
-              list: removeDuplicate(
-                followListInfo.followings.list.concat(resp.followings.list)
-              ),
-            },
-          });
+        const resp2 = await recommendationListQuery({address: addressInput});
+        if (resp2) {
+            setRecommendedList(resp2);
+        }
+    };
+
+        initFollowListInfo();
+    }, [addressInput]);
+
+    const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
+    function changeAddressImmediate(address: string) {
+        setAddressInputImmediate(address);
+        if (timer) {
+            clearTimeout(timer);
+            setTimer(null);
+        }
+        setTimer(
+            setTimeout(() => {
+                changeAddress(address);
+            }, 500)
+        );
     }
-  };
+    const changeAddress = async (value: string) => {
+        setHighlightAddress(addressInput);
+        setAddressInput(value);
 
-  useEffect(() => {
-    initFollowListInfo();
-  }, [address]);
+        if (isValidAddr(value) && addressInput) {
+            // setSearchLoading(true);
+            await fetchSearchAddrInfo(value);
+        }
+    };
 
-  return (
-    <div className={styles.container}>
-      <div className={styles.logo}>
-        <img
-          src="/cyberconnect-logo.png"
-          alt="CyberConnect Logo"
-          width="100%"
-          height="100%"
-        />
-      </div>
-      <div className={styles.discription}>
-        <p>
-          This is a{' '}
-          <a
-            className={styles.link}
-            href="https://docs.cyberconnect.me/"
-            target="_blank"
-          >
-            CyberConnect
-          </a>{' '}
-          starter app. You can freely use it as a base for your application.{' '}
-        </p>
-        <p>
-          This app displays the current user&apos;s followings and followers. It
-          also allows the user to follow/unfollow a wallet address.
-        </p>
-        <p>Try it yourself!</p>
-      </div>
-      <WalletConnectButton />
-      {address && (
-        <div className={styles.searchSection}>
-          <div className={styles.inputContainer}>
-            <TextField
-              onChange={(e) => handleInputChange(e.target.value)}
-              className={styles.textField}
-              placeholder="Please input the Address you want to follow."
-            />
-            <LoadingButton
-              onClick={handleFollow}
-              disabled={searchLoading || !isValidAddr(searchInput) || !address}
-              loading={followLoading}
-              className={styles.loadingButton}
-            >
-              {!searchAddrInfo?.followStatus.isFollowing
-                ? 'Follow'
-                : 'Unfollow'}
-            </LoadingButton>
-          </div>
-          {isValidAddr(searchInput) ? (
-            <div className={styles.isFollowed}>
-              This user{' '}
-              {searchAddrInfo?.followStatus.isFollowed
-                ? 'is following you'
-                : 'has not followed you yet'}
-            </div>
-          ) : (
-            <div className={styles.error}>Please enter a valid address.</div>
-          )}
-        </div>
-      )}
-      {followListInfo && (
-        <div className={styles.listsContainer}>
-          <div className={styles.list}>
-            <div className={styles.subtitle}>
-              You have <strong>{followListInfo.followerCount}</strong>{' '}
-              followers:
-            </div>
-            <div className={styles.followList}>
-              {followListInfo.followers.list.map((user) => {
-                return (
-                  <div key={user.address} className={styles.user}>
-                    <Avatar src={user.avatar} className={styles.avatar} />
-                    <div className={styles.userAddress}>
-                      {user.ens || formatAddress(user.address)}
-                    </div>
-                  </div>
-                );
-              })}
-              {followListInfo.followers.pageInfo.hasNextPage && (
-                <LoadingButton onClick={() => fetchMore('followers')}>
-                  See More
-                </LoadingButton>
-              )}
-            </div>
-          </div>
-          <div className={styles.list}>
-            <div className={styles.subtitle}>
-              You have <strong>{followListInfo.followingCount}</strong>{' '}
-              followings:
-            </div>
-            <div className={styles.followList}>
-              {followListInfo.followings.list.map((user) => {
-                return (
-                  <div key={user.address} className={styles.user}>
-                    <Avatar src={user.avatar} className={styles.avatar} />
-                    <div className={styles.userAddress}>
-                      {user.ens || formatAddress(user.address)}
-                    </div>
-                  </div>
-                );
-              })}
-              {followListInfo.followings.pageInfo.hasNextPage && (
-                <LoadingButton onClick={() => fetchMore('followings')}>
-                  See More
-                </LoadingButton>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={() => setSnackbarOpen(false)}
-      >
-        <MuiAlert
-          onClose={() => setSnackbarOpen(false)}
-          severity="success"
-          sx={{ width: '100%' }}
-        >
-          {snackbarText}
-        </MuiAlert>
-      </Snackbar>
-    </div>
-  );
-};
+    const [height, setHeight] = useState(200);
+    const [width, setWidth] = useState(200);
+    const graphRef = useRef<HTMLDivElement | null>(null);
+    const onResize = useEffect(() => {
+        if (graphRef !== null && graphRef.current !== null) {
+            setHeight(graphRef.current.getBoundingClientRect().height);
+            setWidth(graphRef.current.getBoundingClientRect().width);
+        }
+        window.onresize = () => {
+            if(graphRef !== null && graphRef.current !== null) {
+                setHeight(graphRef.current.getBoundingClientRect().height);
+                setWidth(graphRef.current.getBoundingClientRect().width);
+            }
+        };
+    },[setWidth, setHeight, graphRef])
 
-export default Home;
+    const [highlightAddress, setHighlightAddress] = useState("");
+    const setHighlightCallback = useCallback((str)=>setHighlightAddress(str), []);
+
+    return (
+        <ChakraProvider theme={theme}>
+            <Box p={6} backgroundColor='black' bgGradient='linear(to-tr, black, blue.800, pink.900)' height='100vh' minHeight='600px' width='100%'>
+                <Flex p={6} rounded='md' margin='auto' bgColor='blackAlpha.600' direction='column' height='100%' minW='250px'>
+                    <Box mb={3} flex={0}>
+                        <Flex align='end' flexWrap={['wrap', 'wrap', 'nowrap']}>
+                            <Box flex={2} minW='200px'>
+                                <Heading as='h2' size='xs' textColor='gray.500' mt={2} mb={0}>Address: </Heading>
+                                <Input name="address" bgColor='gray.700' value={addressInputImmediate} onChange={(e) => {changeAddressImmediate(e.target.value)}}></Input>
+                            </Box>
+                            <Box ml={3} flex={1}>
+                                <Box> {
+                                    address !== addressInput ? address :
+                                searchAddrInfo?.identity?.ens || 'no domain for current address'
+                                } </Box>
+                                {balanceState.status === 'fetched' ?
+                                    (balanceState.data.result / 1e18).toLocaleString('en-IN', { maximumSignificantDigits: 4 }) :
+                                    <Spinner size='xs' />} &Xi;
+                            </Box>
+                            </Flex>
+                    </Box>
+                    <Flex flex={1} minHeight='300px' alignItems='stretch' gap={5}>
+                        <Box flexBasis='26em' flexGrow={0}>
+                            <ConnectionsTable 
+                                connections={connections}
+                                recommendations={recommendedList}
+                                highlightAddress={highlightAddress}
+                                setHighlight={setHighlightCallback}
+                                changeAddress={changeAddress}
+                            />
+                        </Box>
+                        <Box flexGrow={1} p={5} overflow='hidden' ref={graphRef}>
+                            {width > 400 &&
+                                <Box height='100%' width='100%' >
+                                    <ConnectionsGraph address={addressInput} connections={connections} width={width} height={height} highlightAddress={highlightAddress} setHighlight={setHighlightCallback} />
+                                </Box>
+                            }
+                        </Box>
+                    </Flex>
+                </Flex>
+            </Box>
+        </ChakraProvider>
+    )
+}
+
+export default ConnectionsPage;

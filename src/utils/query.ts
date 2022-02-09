@@ -1,11 +1,64 @@
+import { NAME_SPACE, NETWORK } from './settings';
 import {
-  FollowListInfoArgs,
-  SearchUserInfoArgs,
-  FollowListInfoResp,
-  SearchUserInfoResp,
+  FollowListInfoArgs, FollowListInfoResp, MultipleFollowListInfoArgs, MultipleFollowListInfoRespEntry, RecomendationListInfoArgs,
+  RecommendedUser, SearchUserInfoArgs, SearchUserInfoResp
 } from './types';
 
-const endPoint = 'https://api.cybertino.io/connect/';
+export const endPoint = 'https://api.cybertino.io/connect/';
+
+export const recommendationListSchema = ({
+  address
+} : RecomendationListInfoArgs ) => {
+  return {
+    operationName: 'recommendationsInfo',
+    query: `query recommendationsInfo($address: String!) {
+      recommendations(address: $address) {
+          data {
+            list {
+              address
+              recommendationReason
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      address,
+    },
+  };
+};
+
+export const multipleFollowersSchema = ({
+  addresses,
+  namespace=NAME_SPACE,
+  network=NETWORK,
+}: MultipleFollowListInfoArgs) => {
+  const queries = addresses.map((address) =>
+    `q${address}: identity(address: "${address}", network: $network) {
+        followings(namespace: $namespace) {
+          list {
+            address
+          }
+        }
+        followers(namespace: $namespace) {
+          list {
+            address
+          }
+        }
+      }
+      `).join('');
+  const query = `query followListInfo($namespace: String, $network: Network) {
+      ${queries}
+    }`;
+  return {
+    operationName: 'followListInfo',
+    query: query,
+    variables: {
+      namespace,
+      network,
+    },
+  };
+};
 
 export const followListInfoSchema = ({
   address,
@@ -20,6 +73,7 @@ export const followListInfoSchema = ({
     operationName: 'followListInfo',
     query: `query followListInfo($address: String!, $namespace: String, $network: Network, $followingFirst: Int, $followingAfter: String, $followerFirst: Int, $followerAfter: String) {
       identity(address: $address, network: $network) {
+        address
         followingCount(namespace: $namespace)
         followerCount(namespace: $namespace)
         followings(namespace: $namespace, first: $followingFirst, after: $followingAfter) {
@@ -89,6 +143,7 @@ export const searchUserInfoSchema = ({
 export const querySchemas = {
   followListInfo: followListInfoSchema,
   searchUserInfo: searchUserInfoSchema,
+  recommendationInfo: recommendationListSchema,
 };
 
 export const request = async (url = '', data = {}) => {
@@ -99,6 +154,10 @@ export const request = async (url = '', data = {}) => {
     cache: 'no-cache',
     headers: {
       'Content-Type': 'application/json',
+      // 'Accept': 'application/json',
+      // 'Access-Control-Allow-Origin': '*',
+      // 'Origin': 'https://cyberconnect-explorer.netlify.app',
+      // 'Access-Control-Request-Method': ['POST', 'OPTIONS'],
     },
     referrerPolicy: 'no-referrer',
     body: JSON.stringify(data),
@@ -118,10 +177,28 @@ export const handleQuery = (
   return request(url, data);
 };
 
+export const recommendationListQuery = async ({
+  address
+}: RecomendationListInfoArgs ) => {
+  const schema = querySchemas['recommendationInfo']({ address });
+
+  const resp = await handleQuery(schema, endPoint);
+
+  return (resp?.data?.recommendations?.data?.list as RecommendedUser[]) || null;
+}
+
+export const multipleFollowersQuery = async (addresses: string[]) => {
+  if(addresses === undefined || addresses.length == 0) return [];
+  const data = await handleQuery(multipleFollowersSchema({ addresses }), endPoint);
+  //@ts-ignore
+  const ret = Object.entries(data.data).map(([address, data])=>({address:address.slice(1), followers:data.followers.list, followings:data.followings.list}));
+  return ret as MultipleFollowListInfoRespEntry[];
+};
+
 export const followListInfoQuery = async ({
   address,
-  namespace,
-  network,
+  namespace=NAME_SPACE,
+  network=NETWORK,
   followingFirst,
   followingAfter,
   followerFirst,
@@ -138,7 +215,7 @@ export const followListInfoQuery = async ({
   });
   const resp = await handleQuery(schema, endPoint);
 
-  return (resp?.data?.identity as FollowListInfoResp) || null;
+  return ({address: resp?.data?.address, ...resp?.data?.identity} as FollowListInfoResp) || null;
 };
 
 export const searchUserInfoQuery = async ({

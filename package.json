@@ -9,15 +9,19 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@chakra-ui/icons": "^1.1.1",
+    "@chakra-ui/react": "^1.8.1",
     "@cyberlab/cyberconnect": "^4.2.0",
     "@emotion/react": "^11.7.1",
     "@emotion/styled": "^11.6.0",
-    "@mui/lab": "^5.0.0-alpha.64",
-    "@mui/material": "^5.2.8",
+    "@fontsource/poppins": "^4.5.1",
     "ethers": "^5.5.3",
+    "framer-motion": "^5.6.0",
     "next": "12.0.7",
     "react": "17.0.2",
     "react-dom": "17.0.2",
+    "react-force-graph": "^1.41.7",
+    "react-identicons": "^1.2.5",
     "web3modal": "^1.9.5"
   },
   "devDependencies": {
